@@ -1,0 +1,40 @@
+# Keeps the profile images in step with jevtic.dev. Only renders when the site has changed.
+name: Update profile images
+
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Render even if the site has not changed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Render from the live site
+        run: |
+          docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -e FORCE="${{ inputs.force }}" \
+            -v "$PWD:/repo" -w /repo --shm-size 1g \
+            mcr.microsoft.com/playwright:v1.49.1-noble node tools/render.mjs
+
+      - name: Commit if anything changed
+        run: |
+          git add assets
+          if git diff --cached --quiet; then
+            echo "Nothing changed."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'Update profile images from jevtic.dev'
+          git push
